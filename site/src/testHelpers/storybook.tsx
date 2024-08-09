@@ -1,9 +1,20 @@
 import type { StoryContext } from "@storybook/react";
 import type { FC } from "react";
+import { useQueryClient } from "react-query";
 import { withDefaultFeatures } from "api/api";
+import { getAuthorizationKey } from "api/queries/authCheck";
+import { hasFirstUserKey, meKey } from "api/queries/users";
 import type { Entitlements } from "api/typesGenerated";
+import { GlobalSnackbar } from "components/GlobalSnackbar/GlobalSnackbar";
+import { AuthProvider } from "contexts/auth/AuthProvider";
+import { permissionsToCheck } from "contexts/auth/permissions";
 import { DashboardContext } from "modules/dashboard/DashboardProvider";
-import { MockAppearanceConfig, MockEntitlements } from "./entities";
+import { DeploySettingsContext } from "pages/DeploySettingsPage/DeploySettingsLayout";
+import {
+  MockAppearanceConfig,
+  MockDefaultOrganization,
+  MockEntitlements,
+} from "./entities";
 
 export const withDashboardProvider = (
   Story: FC,
@@ -26,10 +37,10 @@ export const withDashboardProvider = (
   return (
     <DashboardContext.Provider
       value={{
-        organizationId: "",
         entitlements,
         experiments,
         appearance: MockAppearanceConfig,
+        organizations: [MockDefaultOrganization],
       }}
     >
       <Story />
@@ -83,3 +94,45 @@ export const withDesktopViewport = (Story: FC) => (
     <Story />
   </div>
 );
+
+export const withAuthProvider = (Story: FC, { parameters }: StoryContext) => {
+  if (!parameters.user) {
+    throw new Error("You forgot to add `parameters.user` to your story");
+  }
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- decorators are components
+  const queryClient = useQueryClient();
+  queryClient.setQueryData(meKey, parameters.user);
+  queryClient.setQueryData(hasFirstUserKey, true);
+  queryClient.setQueryData(
+    getAuthorizationKey({ checks: permissionsToCheck }),
+    parameters.permissions ?? {},
+  );
+
+  return (
+    <AuthProvider>
+      <Story />
+    </AuthProvider>
+  );
+};
+
+export const withGlobalSnackbar = (Story: FC) => (
+  <>
+    <Story />
+    <GlobalSnackbar />
+  </>
+);
+
+export const withDeploySettings = (Story: FC, { parameters }: StoryContext) => {
+  return (
+    <DeploySettingsContext.Provider
+      value={{
+        deploymentValues: {
+          config: parameters.deploymentValues ?? {},
+          options: parameters.deploymentOptions ?? [],
+        },
+      }}
+    >
+      <Story />
+    </DeploySettingsContext.Provider>
+  );
+};

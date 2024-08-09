@@ -242,6 +242,14 @@ const OrganizationGroupSettingsPage = lazy(
 const OrganizationMembersPage = lazy(
   () => import("./pages/ManagementSettingsPage/OrganizationMembersPage"),
 );
+const OrganizationCustomRolesPage = lazy(
+  () =>
+    import("./pages/ManagementSettingsPage/CustomRolesPage/CustomRolesPage"),
+);
+const CreateEditRolePage = lazy(
+  () =>
+    import("./pages/ManagementSettingsPage/CustomRolesPage/CreateEditRolePage"),
+);
 const TemplateEmbedPage = lazy(
   () => import("./pages/TemplatePage/TemplateEmbedPage/TemplateEmbedPage"),
 );
@@ -261,6 +269,13 @@ const WorkspaceProxyHealthPage = lazy(
 );
 const ProvisionerDaemonsHealthPage = lazy(
   () => import("./pages/HealthPage/ProvisionerDaemonsPage"),
+);
+const UserNotificationsPage = lazy(
+  () => import("./pages/UserSettingsPage/NotificationsPage/NotificationsPage"),
+);
+const DeploymentNotificationsPage = lazy(
+  () =>
+    import("./pages/DeploySettingsPage/NotificationsPage/NotificationsPage"),
 );
 
 const RoutesWithSuspense = () => {
@@ -376,7 +391,11 @@ export const router = createBrowserRouter(
               <Route index element={<OrganizationSettingsPage />} />
               <Route path="members" element={<OrganizationMembersPage />} />
               {groupsRouter()}
-              <Route path="auditing" element={<></>} />
+              <Route path="roles">
+                <Route index element={<OrganizationCustomRolesPage />} />
+                <Route path="create" element={<CreateEditRolePage />} />
+                <Route path=":roleName" element={<CreateEditRolePage />} />
+              </Route>
             </Route>
           </Route>
 
@@ -410,7 +429,10 @@ export const router = createBrowserRouter(
             <Route path="users" element={<UsersPage />} />
             <Route path="users/create" element={<CreateUserPage />} />
             {groupsRouter()}
-            <Route path="audit" element={<AuditPage />} />
+            <Route
+              path="notifications"
+              element={<DeploymentNotificationsPage />}
+            />
           </Route>
 
           <Route path="/settings" element={<UserSettingsLayout />}>
@@ -431,6 +453,7 @@ export const router = createBrowserRouter(
               <Route index element={<TokensPage />} />
               <Route path="new" element={<CreateTokenPage />} />
             </Route>
+            <Route path="notifications" element={<UserNotificationsPage />} />
           </Route>
 
           {/* In order for the 404 page to work properly the routes that start with
@@ -472,6 +495,10 @@ export const router = createBrowserRouter(
 
         {/* Pages that don't have the dashboard layout */}
         <Route path="/:username/:workspace" element={<WorkspacePage />} />
+        <Route
+          path="/templates/:template/versions/:version/edit"
+          element={<TemplateVersionEditorPage />}
+        />
         <Route
           path="/templates/:organization/:template/versions/:version/edit"
           element={<TemplateVersionEditorPage />}
