@@ -92,6 +92,7 @@ func New() database.Store {
 			workspaceAgentLogs:        make([]database.WorkspaceAgentLog, 0),
 			workspaceBuilds:           make([]database.WorkspaceBuild, 0),
 			workspaceApps:             make([]database.WorkspaceApp, 0),
+			workspaceAppAuditSessions: make([]database.WorkspaceAppAuditSession, 0),
 			workspaces:                make([]database.WorkspaceTable, 0),
 			workspaceProxies:          make([]database.WorkspaceProxy, 0),
 		},
@@ -236,7 +237,9 @@ type data struct {
 	workspaceAgentStats                  []database.WorkspaceAgentStat
 	workspaceAgentMemoryResourceMonitors []database.WorkspaceAgentMemoryResourceMonitor
 	workspaceAgentVolumeResourceMonitors []database.WorkspaceAgentVolumeResourceMonitor
+	workspaceAgentDevcontainers          []database.WorkspaceAgentDevcontainer
 	workspaceApps                        []database.WorkspaceApp
+	workspaceAppAuditSessions            []database.WorkspaceAppAuditSession
 	workspaceAppStatsLastInsertID        int64
 	workspaceAppStats                    []database.WorkspaceAppStat
 	workspaceBuilds                      []database.WorkspaceBuild
@@ -3296,34 +3299,52 @@ func (q *FakeQuerier) GetFilteredInboxNotificationsByUserID(_ context.Context, a
 	defer q.mutex.RUnlock()
 
 	notifications := make([]database.InboxNotification, 0)
-	for _, notification := range q.inboxNotifications {
+	// TODO : after using go version >= 1.23 , we can change this one to https://pkg.go.dev/slices#Backward
+	for idx := len(q.inboxNotifications) - 1; idx >= 0; idx-- {
+		notification := q.inboxNotifications[idx]
+
 		if notification.UserID == arg.UserID {
+			if !arg.CreatedAtOpt.IsZero() && !notification.CreatedAt.Before(arg.CreatedAtOpt) {
+				continue
+			}
+
+			templateFound := false
 			for _, template := range arg.Templates {
-				templateFound := false
 				if notification.TemplateID == template {
 					templateFound = true
 				}
-
-				if !templateFound {
-					continue
-				}
 			}
 
+			if len(arg.Templates) > 0 && !templateFound {
+				continue
+			}
+
+			targetsFound := true
 			for _, target := range arg.Targets {
-				isFound := false
+				targetFound := false
 				for _, insertedTarget := range notification.Targets {
 					if insertedTarget == target {
-						isFound = true
+						targetFound = true
 						break
 					}
 				}
 
-				if !isFound {
-					continue
+				if !targetFound {
+					targetsFound = false
+					break
 				}
-
-				notifications = append(notifications, notification)
 			}
+
+			if !targetsFound {
+				continue
+			}
+
+			if (arg.LimitOpt == 0 && len(notifications) == 25) ||
+				(arg.LimitOpt != 0 && len(notifications) == int(arg.LimitOpt)) {
+				break
+			}
+
+			notifications = append(notifications, notification)
 		}
 	}
 
@@ -6557,6 +6578,16 @@ func (q *FakeQuerier) GetUsers(_ context.Context, params database.GetUsersParams
 		users = usersFilteredByLastSeen
 	}
 
+	if params.GithubComUserID != 0 {
+		usersFilteredByGithubComUserID := make([]database.User, 0, len(users))
+		for i, user := range users {
+			if user.GithubComUserID.Int64 == params.GithubComUserID {
+				usersFilteredByGithubComUserID = append(usersFilteredByGithubComUserID, users[i])
+			}
+		}
+		users = usersFilteredByGithubComUserID
+	}
+
 	beforePageCount := len(users)
 
 	if params.OffsetOpt > 0 {
@@ -6674,6 +6705,22 @@ func (q *FakeQuerier) GetWorkspaceAgentByInstanceID(_ context.Context, instanceI
 		}
 	}
 	return database.WorkspaceAgent{}, sql.ErrNoRows
+}
+
+func (q *FakeQuerier) GetWorkspaceAgentDevcontainersByAgentID(_ context.Context, workspaceAgentID uuid.UUID) ([]database.WorkspaceAgentDevcontainer, error) {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+
+	devcontainers := make([]database.WorkspaceAgentDevcontainer, 0)
+	for _, dc := range q.workspaceAgentDevcontainers {
+		if dc.WorkspaceAgentID == workspaceAgentID {
+			devcontainers = append(devcontainers, dc)
+		}
+	}
+	if len(devcontainers) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return devcontainers, nil
 }
 
 func (q *FakeQuerier) GetWorkspaceAgentLifecycleStateByID(ctx context.Context, id uuid.UUID) (database.GetWorkspaceAgentLifecycleStateByIDRow, error) {
@@ -8223,7 +8270,7 @@ func (q *FakeQuerier) InsertInboxNotification(_ context.Context, arg database.In
 		Content:    arg.Content,
 		Icon:       arg.Icon,
 		Actions:    arg.Actions,
-		CreatedAt:  time.Now(),
+		CreatedAt:  arg.CreatedAt,
 	}
 
 	q.inboxNotifications = append(q.inboxNotifications, notification)
@@ -9031,6 +9078,35 @@ func (q *FakeQuerier) InsertWorkspaceAgent(_ context.Context, arg database.Inser
 	return agent, nil
 }
 
+func (q *FakeQuerier) InsertWorkspaceAgentDevcontainers(_ context.Context, arg database.InsertWorkspaceAgentDevcontainersParams) ([]database.WorkspaceAgentDevcontainer, error) {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return nil, err
+	}
+
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	for _, agent := range q.workspaceAgents {
+		if agent.ID == arg.WorkspaceAgentID {
+			var devcontainers []database.WorkspaceAgentDevcontainer
+			for i, id := range arg.ID {
+				devcontainers = append(devcontainers, database.WorkspaceAgentDevcontainer{
+					WorkspaceAgentID: arg.WorkspaceAgentID,
+					CreatedAt:        arg.CreatedAt,
+					ID:               id,
+					WorkspaceFolder:  arg.WorkspaceFolder[i],
+					ConfigPath:       arg.ConfigPath[i],
+				})
+			}
+			q.workspaceAgentDevcontainers = append(q.workspaceAgentDevcontainers, devcontainers...)
+			return devcontainers, nil
+		}
+	}
+
+	return nil, errForeignKeyConstraint
+}
+
 func (q *FakeQuerier) InsertWorkspaceAgentLogSources(_ context.Context, arg database.InsertWorkspaceAgentLogSourcesParams) ([]database.WorkspaceAgentLogSource, error) {
 	err := validateDatabaseType(arg)
 	if err != nil {
@@ -9478,6 +9554,21 @@ func (q *FakeQuerier) ListWorkspaceAgentPortShares(_ context.Context, workspaceI
 	}
 
 	return shares, nil
+}
+
+func (q *FakeQuerier) MarkAllInboxNotificationsAsRead(_ context.Context, arg database.MarkAllInboxNotificationsAsReadParams) error {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return err
+	}
+
+	for idx, notif := range q.inboxNotifications {
+		if notif.UserID == arg.UserID && !notif.ReadAt.Valid {
+			q.inboxNotifications[idx].ReadAt = arg.ReadAt
+		}
+	}
+
+	return nil
 }
 
 // nolint:forcetypeassert
@@ -12261,6 +12352,64 @@ func (q *FakeQuerier) UpsertWorkspaceAgentPortShare(_ context.Context, arg datab
 	q.workspaceAgentPortShares = append(q.workspaceAgentPortShares, psl)
 
 	return psl, nil
+}
+
+func (q *FakeQuerier) UpsertWorkspaceAppAuditSession(_ context.Context, arg database.UpsertWorkspaceAppAuditSessionParams) (bool, error) {
+	err := validateDatabaseType(arg)
+	if err != nil {
+		return false, err
+	}
+
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	for i, s := range q.workspaceAppAuditSessions {
+		if s.AgentID != arg.AgentID {
+			continue
+		}
+		if s.AppID != arg.AppID {
+			continue
+		}
+		if s.UserID != arg.UserID {
+			continue
+		}
+		if s.Ip != arg.Ip {
+			continue
+		}
+		if s.UserAgent != arg.UserAgent {
+			continue
+		}
+		if s.SlugOrPort != arg.SlugOrPort {
+			continue
+		}
+		if s.StatusCode != arg.StatusCode {
+			continue
+		}
+
+		staleTime := dbtime.Now().Add(-(time.Duration(arg.StaleIntervalMS) * time.Millisecond))
+		fresh := s.UpdatedAt.After(staleTime)
+
+		q.workspaceAppAuditSessions[i].UpdatedAt = arg.UpdatedAt
+		if !fresh {
+			q.workspaceAppAuditSessions[i].ID = arg.ID
+			q.workspaceAppAuditSessions[i].StartedAt = arg.StartedAt
+			return true, nil
+		}
+		return false, nil
+	}
+
+	q.workspaceAppAuditSessions = append(q.workspaceAppAuditSessions, database.WorkspaceAppAuditSession{
+		AgentID:    arg.AgentID,
+		AppID:      arg.AppID,
+		UserID:     arg.UserID,
+		Ip:         arg.Ip,
+		UserAgent:  arg.UserAgent,
+		SlugOrPort: arg.SlugOrPort,
+		StatusCode: arg.StatusCode,
+		StartedAt:  arg.StartedAt,
+		UpdatedAt:  arg.UpdatedAt,
+	})
+	return true, nil
 }
 
 func (q *FakeQuerier) GetAuthorizedTemplates(ctx context.Context, arg database.GetTemplatesWithFilterParams, prepared rbac.PreparedAuthorized) ([]database.Template, error) {
