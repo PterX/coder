@@ -383,6 +383,10 @@ func (c OAuth2ProviderAppCode) RBACObject() rbac.Object {
 	return rbac.ResourceOauth2AppCodeToken.WithOwner(c.UserID.String())
 }
 
+func (t OAuth2ProviderAppToken) RBACObject() rbac.Object {
+	return rbac.ResourceOauth2AppCodeToken.WithOwner(t.UserID.String()).WithID(t.ID)
+}
+
 func (OAuth2ProviderAppSecret) RBACObject() rbac.Object {
 	return rbac.ResourceOauth2AppSecret
 }
@@ -610,9 +614,4 @@ func (m WorkspaceAgentVolumeResourceMonitor) Debounce(
 	}
 
 	return m.DebouncedUntil, false
-}
-
-func (c Chat) RBACObject() rbac.Object {
-	return rbac.ResourceChat.WithID(c.ID).
-		WithOwner(c.OwnerID.String())
 }

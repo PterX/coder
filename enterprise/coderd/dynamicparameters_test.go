@@ -25,7 +25,9 @@ func TestDynamicParameterBuild(t *testing.T) {
 	t.Parallel()
 
 	owner, _, _, first := coderdenttest.NewWithAPI(t, &coderdenttest.Options{
-		Options: &coderdtest.Options{IncludeProvisionerDaemon: true},
+		Options: &coderdtest.Options{
+			IncludeProvisionerDaemon: true,
+		},
 		LicenseOptions: &coderdenttest.LicenseOptions{
 			Features: license.Features{
 				codersdk.FeatureTemplateRBAC: 1,
@@ -302,6 +304,143 @@ func TestDynamicParameterBuild(t *testing.T) {
 			require.ErrorContains(t, err, "Number must be between 0 and 10")
 		})
 	})
+
+	t.Run("ImmutableValidation", func(t *testing.T) {
+		t.Parallel()
+
+		// NewImmutable tests the case where a new immutable parameter is added to a template
+		// after a workspace has been created with an older version of the template.
+		// The test tries to delete the workspace, which should succeed.
+		t.Run("NewImmutable", func(t *testing.T) {
+			t.Parallel()
+
+			ctx := testutil.Context(t, testutil.WaitShort)
+			// Start with a new template that has 0 parameters
+			empty, _ := coderdtest.DynamicParameterTemplate(t, templateAdmin, orgID, coderdtest.DynamicParameterTemplateParams{
+				MainTF: string(must(os.ReadFile("testdata/parameters/none/main.tf"))),
+			})
+
+			// Create the workspace with 0 parameters
+			wrk, err := templateAdmin.CreateUserWorkspace(ctx, codersdk.Me, codersdk.CreateWorkspaceRequest{
+				TemplateID:          empty.ID,
+				Name:                coderdtest.RandomUsername(t),
+				RichParameterValues: []codersdk.WorkspaceBuildParameter{},
+			})
+			require.NoError(t, err)
+			coderdtest.AwaitWorkspaceBuildJobCompleted(t, templateAdmin, wrk.LatestBuild.ID)
+
+			// Update the template with a new immutable parameter
+			_, immutable := coderdtest.DynamicParameterTemplate(t, templateAdmin, orgID, coderdtest.DynamicParameterTemplateParams{
+				MainTF:     string(must(os.ReadFile("testdata/parameters/immutable/main.tf"))),
+				TemplateID: empty.ID,
+			})
+
+			bld, err := templateAdmin.CreateWorkspaceBuild(ctx, wrk.ID, codersdk.CreateWorkspaceBuildRequest{
+				TemplateVersionID: immutable.ID, // Use the new template version with the immutable parameter
+				Transition:        codersdk.WorkspaceTransitionDelete,
+				DryRun:            false,
+			})
+			require.NoError(t, err)
+			coderdtest.AwaitWorkspaceBuildJobCompleted(t, templateAdmin, bld.ID)
+
+			// Verify the immutable parameter is set on the workspace build
+			params, err := templateAdmin.WorkspaceBuildParameters(ctx, bld.ID)
+			require.NoError(t, err)
+			require.Len(t, params, 1)
+			require.Equal(t, "Hello World", params[0].Value)
+
+			// Verify the workspace is deleted
+			deleted, err := templateAdmin.DeletedWorkspace(ctx, wrk.ID)
+			require.NoError(t, err)
+			require.Equal(t, wrk.ID, deleted.ID, "workspace should be deleted")
+		})
+	})
+}
+
+func TestDynamicWorkspaceTags(t *testing.T) {
+	t.Parallel()
+
+	owner, _, _, first := coderdenttest.NewWithAPI(t, &coderdenttest.Options{
+		Options: &coderdtest.Options{
+			IncludeProvisionerDaemon: true,
+		},
+		LicenseOptions: &coderdenttest.LicenseOptions{
+			Features: license.Features{
+				codersdk.FeatureTemplateRBAC:               1,
+				codersdk.FeatureExternalProvisionerDaemons: 1,
+			},
+		},
+	})
+
+	orgID := first.OrganizationID
+
+	templateAdmin, _ := coderdtest.CreateAnotherUser(t, owner, orgID, rbac.ScopedRoleOrgTemplateAdmin(orgID))
+	// create the template first, mark it as dynamic, then create the second version with the workspace tags.
+	// This ensures the template import uses the dynamic tags flow. The second step will happen in a test below.
+	workspaceTags, _ := coderdtest.DynamicParameterTemplate(t, templateAdmin, orgID, coderdtest.DynamicParameterTemplateParams{
+		MainTF: ``,
+	})
+
+	expectedTags := map[string]string{
+		"function":    "param is foo",
+		"stringvar":   "bar",
+		"numvar":      "42",
+		"boolvar":     "true",
+		"stringparam": "foo",
+		"numparam":    "7",
+		"boolparam":   "true",
+		"listparam":   `["a","b"]`,
+		"static":      "static value",
+	}
+
+	// A new provisioner daemon is required to make the template version.
+	importProvisioner := coderdenttest.NewExternalProvisionerDaemon(t, owner, first.OrganizationID, expectedTags)
+	defer importProvisioner.Close()
+
+	// This tests the template import's workspace tags extraction.
+	workspaceTags, workspaceTagsVersion := coderdtest.DynamicParameterTemplate(t, templateAdmin, orgID, coderdtest.DynamicParameterTemplateParams{
+		MainTF:     string(must(os.ReadFile("testdata/parameters/workspacetags/main.tf"))),
+		TemplateID: workspaceTags.ID,
+		Version: func(request *codersdk.CreateTemplateVersionRequest) {
+			request.ProvisionerTags = map[string]string{
+				"static": "static value",
+			}
+		},
+	})
+	importProvisioner.Close() // No longer need this provisioner daemon, as the template import is done.
+
+	// Test the workspace create tag extraction.
+	expectedTags["function"] = "param is baz"
+	expectedTags["stringparam"] = "baz"
+	expectedTags["numparam"] = "8"
+	expectedTags["boolparam"] = "false"
+	workspaceProvisioner := coderdenttest.NewExternalProvisionerDaemon(t, owner, first.OrganizationID, expectedTags)
+	defer workspaceProvisioner.Close()
+
+	ctx := testutil.Context(t, testutil.WaitShort)
+	wrk, err := templateAdmin.CreateUserWorkspace(ctx, codersdk.Me, codersdk.CreateWorkspaceRequest{
+		TemplateVersionID: workspaceTagsVersion.ID,
+		Name:              coderdtest.RandomUsername(t),
+		RichParameterValues: []codersdk.WorkspaceBuildParameter{
+			{Name: "stringparam", Value: "baz"},
+			{Name: "numparam", Value: "8"},
+			{Name: "boolparam", Value: "false"},
+		},
+	})
+	require.NoError(t, err)
+
+	build, err := templateAdmin.WorkspaceBuild(ctx, wrk.LatestBuild.ID)
+	require.NoError(t, err)
+
+	job, err := templateAdmin.OrganizationProvisionerJob(ctx, first.OrganizationID, build.Job.ID)
+	require.NoError(t, err)
+
+	// If the tags do no match, the await will fail.
+	// 'scope' and 'owner' tags are always included.
+	expectedTags["scope"] = "organization"
+	expectedTags["owner"] = ""
+	require.Equal(t, expectedTags, job.Tags)
+	coderdtest.AwaitWorkspaceBuildJobCompleted(t, templateAdmin, wrk.LatestBuild.ID)
 }
 
 // TestDynamicParameterTemplate uses a template with some dynamic elements, and

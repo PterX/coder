@@ -6,18 +6,6 @@ export interface ACLAvailable {
 	readonly groups: readonly Group[];
 }
 
-// From codersdk/deployment.go
-export interface AIConfig {
-	readonly providers?: readonly AIProviderConfig[];
-}
-
-// From codersdk/deployment.go
-export interface AIProviderConfig {
-	readonly type: string;
-	readonly models: readonly string[];
-	readonly base_url: string;
-}
-
 // From codersdk/aitasks.go
 export const AITaskPromptParameterName = "AI Prompt";
 
@@ -311,28 +299,6 @@ export interface ChangePasswordWithOneTimePasscodeRequest {
 	readonly one_time_passcode: string;
 }
 
-// From codersdk/chat.go
-export interface Chat {
-	readonly id: string;
-	readonly created_at: string;
-	readonly updated_at: string;
-	readonly title: string;
-}
-
-// From codersdk/chat.go
-export interface ChatMessage {
-	readonly id: string;
-	readonly createdAt?: Record<string, string>;
-	readonly content: string;
-	readonly role: string;
-	// external type "github.com/kylecarbs/aisdk-go.Part", to include this type the package must be explicitly included in the parsing
-	readonly parts?: readonly unknown[];
-	// empty interface{} type, falling back to unknown
-	readonly annotations?: readonly unknown[];
-	// external type "github.com/kylecarbs/aisdk-go.Attachment", to include this type the package must be explicitly included in the parsing
-	readonly experimental_attachments?: readonly unknown[];
-}
-
 // From codersdk/client.go
 export const CoderDesktopTelemetryHeader = "Coder-Desktop-Telemetry";
 
@@ -352,14 +318,6 @@ export const ContentTypeZip = "application/zip";
 export interface ConvertLoginRequest {
 	readonly to_type: LoginType;
 	readonly password: string;
-}
-
-// From codersdk/chat.go
-export interface CreateChatMessageRequest {
-	readonly model: string;
-	// external type "github.com/kylecarbs/aisdk-go.Message", to include this type the package must be explicitly included in the parsing
-	readonly message: unknown;
-	readonly thinking: boolean;
 }
 
 // From codersdk/users.go
@@ -436,6 +394,7 @@ export interface CreateTemplateRequest {
 	readonly disable_everyone_group_access: boolean;
 	readonly require_active_version: boolean;
 	readonly max_port_share_level: WorkspaceAgentPortShareLevel | null;
+	readonly template_use_classic_parameter_flow?: boolean;
 }
 
 // From codersdk/templateversions.go
@@ -726,7 +685,6 @@ export interface DeploymentValues {
 	readonly disable_password_auth?: boolean;
 	readonly support?: SupportConfig;
 	readonly external_auth?: SerpentStruct<ExternalAuthConfig[]>;
-	readonly ai?: SerpentStruct<AIConfig>;
 	readonly config_ssh?: SSHConfig;
 	readonly wgtunnel_host?: string;
 	readonly disable_owner_workspace_exec?: boolean;
@@ -834,21 +792,21 @@ export const EntitlementsWarningHeader = "X-Coder-Entitlements-Warning";
 
 // From codersdk/deployment.go
 export type Experiment =
-	| "agentic-chat"
 	| "auto-fill-parameters"
 	| "example"
+	| "mcp-server-http"
 	| "notifications"
+	| "oauth2"
 	| "web-push"
-	| "workspace-prebuilds"
 	| "workspace-usage";
 
 export const Experiments: Experiment[] = [
-	"agentic-chat",
 	"auto-fill-parameters",
 	"example",
+	"mcp-server-http",
 	"notifications",
+	"oauth2",
 	"web-push",
-	"workspace-prebuilds",
 	"workspace-usage",
 ];
 
@@ -1259,18 +1217,6 @@ export type JobErrorCode = "REQUIRED_TEMPLATE_VARIABLES";
 
 export const JobErrorCodes: JobErrorCode[] = ["REQUIRED_TEMPLATE_VARIABLES"];
 
-// From codersdk/deployment.go
-export interface LanguageModel {
-	readonly id: string;
-	readonly display_name: string;
-	readonly provider: string;
-}
-
-// From codersdk/deployment.go
-export interface LanguageModelConfig {
-	readonly models: readonly LanguageModel[];
-}
-
 // From codersdk/licenses.go
 export interface License {
 	readonly id: number;
@@ -1504,6 +1450,88 @@ export interface OAuth2AppEndpoints {
 	readonly device_authorization: string;
 }
 
+// From codersdk/oauth2.go
+export interface OAuth2AuthorizationServerMetadata {
+	readonly issuer: string;
+	readonly authorization_endpoint: string;
+	readonly token_endpoint: string;
+	readonly registration_endpoint?: string;
+	readonly response_types_supported: readonly string[];
+	readonly grant_types_supported: readonly string[];
+	readonly code_challenge_methods_supported: readonly string[];
+	readonly scopes_supported?: readonly string[];
+	readonly token_endpoint_auth_methods_supported?: readonly string[];
+}
+
+// From codersdk/oauth2.go
+export interface OAuth2ClientConfiguration {
+	readonly client_id: string;
+	readonly client_id_issued_at: number;
+	readonly client_secret_expires_at?: number;
+	readonly redirect_uris?: readonly string[];
+	readonly client_name?: string;
+	readonly client_uri?: string;
+	readonly logo_uri?: string;
+	readonly tos_uri?: string;
+	readonly policy_uri?: string;
+	readonly jwks_uri?: string;
+	readonly jwks?: Record<string, string>;
+	readonly software_id?: string;
+	readonly software_version?: string;
+	readonly grant_types: readonly string[];
+	readonly response_types: readonly string[];
+	readonly token_endpoint_auth_method: string;
+	readonly scope?: string;
+	readonly contacts?: readonly string[];
+	readonly registration_access_token: string;
+	readonly registration_client_uri: string;
+}
+
+// From codersdk/oauth2.go
+export interface OAuth2ClientRegistrationRequest {
+	readonly redirect_uris?: readonly string[];
+	readonly client_name?: string;
+	readonly client_uri?: string;
+	readonly logo_uri?: string;
+	readonly tos_uri?: string;
+	readonly policy_uri?: string;
+	readonly jwks_uri?: string;
+	readonly jwks?: Record<string, string>;
+	readonly software_id?: string;
+	readonly software_version?: string;
+	readonly software_statement?: string;
+	readonly grant_types?: readonly string[];
+	readonly response_types?: readonly string[];
+	readonly token_endpoint_auth_method?: string;
+	readonly scope?: string;
+	readonly contacts?: readonly string[];
+}
+
+// From codersdk/oauth2.go
+export interface OAuth2ClientRegistrationResponse {
+	readonly client_id: string;
+	readonly client_secret?: string;
+	readonly client_id_issued_at: number;
+	readonly client_secret_expires_at?: number;
+	readonly redirect_uris?: readonly string[];
+	readonly client_name?: string;
+	readonly client_uri?: string;
+	readonly logo_uri?: string;
+	readonly tos_uri?: string;
+	readonly policy_uri?: string;
+	readonly jwks_uri?: string;
+	readonly jwks?: Record<string, string>;
+	readonly software_id?: string;
+	readonly software_version?: string;
+	readonly grant_types: readonly string[];
+	readonly response_types: readonly string[];
+	readonly token_endpoint_auth_method: string;
+	readonly scope?: string;
+	readonly contacts?: readonly string[];
+	readonly registration_access_token: string;
+	readonly registration_client_uri: string;
+}
+
 // From codersdk/deployment.go
 export interface OAuth2Config {
 	readonly github: OAuth2GithubConfig;
@@ -1525,6 +1553,14 @@ export interface OAuth2GithubConfig {
 	readonly allow_signups: boolean;
 	readonly allow_everyone: boolean;
 	readonly enterprise_base_url: string;
+}
+
+// From codersdk/oauth2.go
+export interface OAuth2ProtectedResourceMetadata {
+	readonly resource: string;
+	readonly authorization_servers: readonly string[];
+	readonly scopes_supported?: readonly string[];
+	readonly bearer_methods_supported?: readonly string[];
 }
 
 // From codersdk/oauth2.go
@@ -1831,6 +1867,11 @@ export interface PrebuildsConfig {
 	readonly failure_hard_limit: number;
 }
 
+// From codersdk/prebuilds.go
+export interface PrebuildsSettings {
+	readonly reconciliation_paused: boolean;
+}
+
 // From codersdk/presets.go
 export interface Preset {
 	readonly ID: string;
@@ -1882,6 +1923,7 @@ export interface PreviewParameterStyling {
 	readonly placeholder?: string;
 	readonly disabled?: boolean;
 	readonly label?: string;
+	readonly mask_input?: boolean;
 }
 
 // From codersdk/parameters.go
@@ -2186,7 +2228,6 @@ export type RBACResource =
 	| "assign_org_role"
 	| "assign_role"
 	| "audit_log"
-	| "chat"
 	| "crypto_key"
 	| "debug_info"
 	| "deployment_config"
@@ -2226,7 +2267,6 @@ export const RBACResources: RBACResource[] = [
 	"assign_org_role",
 	"assign_role",
 	"audit_log",
-	"chat",
 	"crypto_key",
 	"debug_info",
 	"deployment_config",
@@ -2338,6 +2378,7 @@ export type ResourceType =
 	| "oauth2_provider_app_secret"
 	| "organization"
 	| "organization_member"
+	| "prebuilds_settings"
 	| "template"
 	| "template_version"
 	| "user"
@@ -2364,6 +2405,7 @@ export const ResourceTypes: ResourceType[] = [
 	"oauth2_provider_app_secret",
 	"organization",
 	"organization_member",
+	"prebuilds_settings",
 	"template",
 	"template_version",
 	"user",
@@ -3390,6 +3432,7 @@ export interface WorkspaceAgentDevcontainer {
 	readonly dirty: boolean;
 	readonly container?: WorkspaceAgentContainer;
 	readonly agent?: WorkspaceAgentDevcontainerAgent;
+	readonly error?: string;
 }
 
 // From codersdk/workspaceagents.go

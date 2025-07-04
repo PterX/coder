@@ -327,6 +327,16 @@ func (s *MethodTestSuite) TestAuditLogs() {
 			LimitOpt: 10,
 		}, emptyPreparedAuthorized{}).Asserts(rbac.ResourceAuditLog, policy.ActionRead)
 	}))
+	s.Run("CountAuditLogs", s.Subtest(func(db database.Store, check *expects) {
+		_ = dbgen.AuditLog(s.T(), db, database.AuditLog{})
+		_ = dbgen.AuditLog(s.T(), db, database.AuditLog{})
+		check.Args(database.CountAuditLogsParams{}).Asserts(rbac.ResourceAuditLog, policy.ActionRead).WithNotAuthorized("nil")
+	}))
+	s.Run("CountAuthorizedAuditLogs", s.Subtest(func(db database.Store, check *expects) {
+		_ = dbgen.AuditLog(s.T(), db, database.AuditLog{})
+		_ = dbgen.AuditLog(s.T(), db, database.AuditLog{})
+		check.Args(database.CountAuditLogsParams{}, emptyPreparedAuthorized{}).Asserts(rbac.ResourceAuditLog, policy.ActionRead)
+	}))
 }
 
 func (s *MethodTestSuite) TestFile() {
@@ -5059,8 +5069,13 @@ func (s *MethodTestSuite) TestPrebuilds() {
 	}))
 	s.Run("GetPrebuildMetrics", s.Subtest(func(_ database.Store, check *expects) {
 		check.Args().
-			Asserts(rbac.ResourceWorkspace.All(), policy.ActionRead).
-			ErrorsWithInMemDB(dbmem.ErrUnimplemented)
+			Asserts(rbac.ResourceWorkspace.All(), policy.ActionRead)
+	}))
+	s.Run("GetPrebuildsSettings", s.Subtest(func(db database.Store, check *expects) {
+		check.Args().Asserts()
+	}))
+	s.Run("UpsertPrebuildsSettings", s.Subtest(func(db database.Store, check *expects) {
+		check.Args("foo").Asserts(rbac.ResourceDeploymentConfig, policy.ActionUpdate)
 	}))
 	s.Run("CountInProgressPrebuilds", s.Subtest(func(_ database.Store, check *expects) {
 		check.Args().
@@ -5167,17 +5182,15 @@ func (s *MethodTestSuite) TestOAuth2ProviderApps() {
 		key, _ := dbgen.APIKey(s.T(), db, database.APIKey{
 			UserID: user.ID,
 		})
-		createdAt := dbtestutil.NowInDefaultTimezone()
-		if !dbtestutil.WillUsePostgres() {
-			createdAt = time.Time{}
-		}
+		// Use a fixed timestamp for consistent test results across all database types
+		fixedTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 		app := dbgen.OAuth2ProviderApp(s.T(), db, database.OAuth2ProviderApp{
-			CreatedAt: createdAt,
-			UpdatedAt: createdAt,
+			CreatedAt: fixedTime,
+			UpdatedAt: fixedTime,
 		})
 		_ = dbgen.OAuth2ProviderApp(s.T(), db, database.OAuth2ProviderApp{
-			CreatedAt: createdAt,
-			UpdatedAt: createdAt,
+			CreatedAt: fixedTime,
+			UpdatedAt: fixedTime,
 		})
 		secret := dbgen.OAuth2ProviderAppSecret(s.T(), db, database.OAuth2ProviderAppSecret{
 			AppID: app.ID,
@@ -5186,20 +5199,17 @@ func (s *MethodTestSuite) TestOAuth2ProviderApps() {
 			_ = dbgen.OAuth2ProviderAppToken(s.T(), db, database.OAuth2ProviderAppToken{
 				AppSecretID: secret.ID,
 				APIKeyID:    key.ID,
+				UserID:      user.ID,
 				HashPrefix:  []byte(fmt.Sprintf("%d", i)),
 			})
 		}
+		expectedApp := app
+		expectedApp.CreatedAt = fixedTime
+		expectedApp.UpdatedAt = fixedTime
 		check.Args(user.ID).Asserts(rbac.ResourceOauth2AppCodeToken.WithOwner(user.ID.String()), policy.ActionRead).Returns([]database.GetOAuth2ProviderAppsByUserIDRow{
 			{
-				OAuth2ProviderApp: database.OAuth2ProviderApp{
-					ID:          app.ID,
-					CallbackURL: app.CallbackURL,
-					Icon:        app.Icon,
-					Name:        app.Name,
-					CreatedAt:   createdAt,
-					UpdatedAt:   createdAt,
-				},
-				TokenCount: 5,
+				OAuth2ProviderApp: expectedApp,
+				TokenCount:        5,
 			},
 		})
 	}))
@@ -5212,15 +5222,76 @@ func (s *MethodTestSuite) TestOAuth2ProviderApps() {
 		app.Name = "my-new-name"
 		app.UpdatedAt = dbtestutil.NowInDefaultTimezone()
 		check.Args(database.UpdateOAuth2ProviderAppByIDParams{
-			ID:          app.ID,
-			Name:        app.Name,
-			CallbackURL: app.CallbackURL,
-			UpdatedAt:   app.UpdatedAt,
+			ID:                      app.ID,
+			Name:                    app.Name,
+			Icon:                    app.Icon,
+			CallbackURL:             app.CallbackURL,
+			RedirectUris:            app.RedirectUris,
+			ClientType:              app.ClientType,
+			DynamicallyRegistered:   app.DynamicallyRegistered,
+			ClientSecretExpiresAt:   app.ClientSecretExpiresAt,
+			GrantTypes:              app.GrantTypes,
+			ResponseTypes:           app.ResponseTypes,
+			TokenEndpointAuthMethod: app.TokenEndpointAuthMethod,
+			Scope:                   app.Scope,
+			Contacts:                app.Contacts,
+			ClientUri:               app.ClientUri,
+			LogoUri:                 app.LogoUri,
+			TosUri:                  app.TosUri,
+			PolicyUri:               app.PolicyUri,
+			JwksUri:                 app.JwksUri,
+			Jwks:                    app.Jwks,
+			SoftwareID:              app.SoftwareID,
+			SoftwareVersion:         app.SoftwareVersion,
+			UpdatedAt:               app.UpdatedAt,
 		}).Asserts(rbac.ResourceOauth2App, policy.ActionUpdate).Returns(app)
 	}))
 	s.Run("DeleteOAuth2ProviderAppByID", s.Subtest(func(db database.Store, check *expects) {
 		app := dbgen.OAuth2ProviderApp(s.T(), db, database.OAuth2ProviderApp{})
 		check.Args(app.ID).Asserts(rbac.ResourceOauth2App, policy.ActionDelete)
+	}))
+	s.Run("GetOAuth2ProviderAppByClientID", s.Subtest(func(db database.Store, check *expects) {
+		app := dbgen.OAuth2ProviderApp(s.T(), db, database.OAuth2ProviderApp{})
+		check.Args(app.ID).Asserts(rbac.ResourceOauth2App, policy.ActionRead).Returns(app)
+	}))
+	s.Run("DeleteOAuth2ProviderAppByClientID", s.Subtest(func(db database.Store, check *expects) {
+		app := dbgen.OAuth2ProviderApp(s.T(), db, database.OAuth2ProviderApp{})
+		check.Args(app.ID).Asserts(rbac.ResourceOauth2App, policy.ActionDelete)
+	}))
+	s.Run("UpdateOAuth2ProviderAppByClientID", s.Subtest(func(db database.Store, check *expects) {
+		dbtestutil.DisableForeignKeysAndTriggers(s.T(), db)
+		app := dbgen.OAuth2ProviderApp(s.T(), db, database.OAuth2ProviderApp{})
+		app.Name = "updated-name"
+		app.UpdatedAt = dbtestutil.NowInDefaultTimezone()
+		check.Args(database.UpdateOAuth2ProviderAppByClientIDParams{
+			ID:                      app.ID,
+			Name:                    app.Name,
+			Icon:                    app.Icon,
+			CallbackURL:             app.CallbackURL,
+			RedirectUris:            app.RedirectUris,
+			ClientType:              app.ClientType,
+			ClientSecretExpiresAt:   app.ClientSecretExpiresAt,
+			GrantTypes:              app.GrantTypes,
+			ResponseTypes:           app.ResponseTypes,
+			TokenEndpointAuthMethod: app.TokenEndpointAuthMethod,
+			Scope:                   app.Scope,
+			Contacts:                app.Contacts,
+			ClientUri:               app.ClientUri,
+			LogoUri:                 app.LogoUri,
+			TosUri:                  app.TosUri,
+			PolicyUri:               app.PolicyUri,
+			JwksUri:                 app.JwksUri,
+			Jwks:                    app.Jwks,
+			SoftwareID:              app.SoftwareID,
+			SoftwareVersion:         app.SoftwareVersion,
+			UpdatedAt:               app.UpdatedAt,
+		}).Asserts(rbac.ResourceOauth2App, policy.ActionUpdate).Returns(app)
+	}))
+	s.Run("GetOAuth2ProviderAppByRegistrationToken", s.Subtest(func(db database.Store, check *expects) {
+		app := dbgen.OAuth2ProviderApp(s.T(), db, database.OAuth2ProviderApp{
+			RegistrationAccessToken: sql.NullString{String: "test-token", Valid: true},
+		})
+		check.Args(sql.NullString{String: "test-token", Valid: true}).Asserts(rbac.ResourceOauth2App, policy.ActionRead).Returns(app)
 	}))
 }
 
@@ -5354,6 +5425,7 @@ func (s *MethodTestSuite) TestOAuth2ProviderAppTokens() {
 		check.Args(database.InsertOAuth2ProviderAppTokenParams{
 			AppSecretID: secret.ID,
 			APIKeyID:    key.ID,
+			UserID:      user.ID,
 		}).Asserts(rbac.ResourceOauth2AppCodeToken.WithOwner(user.ID.String()), policy.ActionCreate)
 	}))
 	s.Run("GetOAuth2ProviderAppTokenByPrefix", s.Subtest(func(db database.Store, check *expects) {
@@ -5368,8 +5440,25 @@ func (s *MethodTestSuite) TestOAuth2ProviderAppTokens() {
 		token := dbgen.OAuth2ProviderAppToken(s.T(), db, database.OAuth2ProviderAppToken{
 			AppSecretID: secret.ID,
 			APIKeyID:    key.ID,
+			UserID:      user.ID,
 		})
-		check.Args(token.HashPrefix).Asserts(rbac.ResourceOauth2AppCodeToken.WithOwner(user.ID.String()), policy.ActionRead)
+		check.Args(token.HashPrefix).Asserts(rbac.ResourceOauth2AppCodeToken.WithOwner(user.ID.String()).WithID(token.ID), policy.ActionRead).Returns(token)
+	}))
+	s.Run("GetOAuth2ProviderAppTokenByAPIKeyID", s.Subtest(func(db database.Store, check *expects) {
+		user := dbgen.User(s.T(), db, database.User{})
+		key, _ := dbgen.APIKey(s.T(), db, database.APIKey{
+			UserID: user.ID,
+		})
+		app := dbgen.OAuth2ProviderApp(s.T(), db, database.OAuth2ProviderApp{})
+		secret := dbgen.OAuth2ProviderAppSecret(s.T(), db, database.OAuth2ProviderAppSecret{
+			AppID: app.ID,
+		})
+		token := dbgen.OAuth2ProviderAppToken(s.T(), db, database.OAuth2ProviderAppToken{
+			AppSecretID: secret.ID,
+			APIKeyID:    key.ID,
+			UserID:      user.ID,
+		})
+		check.Args(token.APIKeyID).Asserts(rbac.ResourceOauth2AppCodeToken.WithOwner(user.ID.String()).WithID(token.ID), policy.ActionRead).Returns(token)
 	}))
 	s.Run("DeleteOAuth2ProviderAppTokensByAppAndUserID", s.Subtest(func(db database.Store, check *expects) {
 		dbtestutil.DisableForeignKeysAndTriggers(s.T(), db)
@@ -5385,6 +5474,7 @@ func (s *MethodTestSuite) TestOAuth2ProviderAppTokens() {
 			_ = dbgen.OAuth2ProviderAppToken(s.T(), db, database.OAuth2ProviderAppToken{
 				AppSecretID: secret.ID,
 				APIKeyID:    key.ID,
+				UserID:      user.ID,
 				HashPrefix:  []byte(fmt.Sprintf("%d", i)),
 			})
 		}
@@ -5546,80 +5636,6 @@ func (s *MethodTestSuite) TestResourcesProvisionerdserver() {
 		check.Args(database.InsertWorkspaceAgentDevcontainersParams{
 			WorkspaceAgentID: agt.ID,
 		}).Asserts(rbac.ResourceWorkspaceAgentDevcontainers, policy.ActionCreate)
-	}))
-}
-
-func (s *MethodTestSuite) TestChat() {
-	createChat := func(t *testing.T, db database.Store) (database.User, database.Chat, database.ChatMessage) {
-		t.Helper()
-
-		usr := dbgen.User(t, db, database.User{})
-		chat := dbgen.Chat(s.T(), db, database.Chat{
-			OwnerID: usr.ID,
-		})
-		msg := dbgen.ChatMessage(s.T(), db, database.ChatMessage{
-			ChatID: chat.ID,
-		})
-
-		return usr, chat, msg
-	}
-
-	s.Run("DeleteChat", s.Subtest(func(db database.Store, check *expects) {
-		_, c, _ := createChat(s.T(), db)
-		check.Args(c.ID).Asserts(c, policy.ActionDelete)
-	}))
-
-	s.Run("GetChatByID", s.Subtest(func(db database.Store, check *expects) {
-		_, c, _ := createChat(s.T(), db)
-		check.Args(c.ID).Asserts(c, policy.ActionRead).Returns(c)
-	}))
-
-	s.Run("GetChatMessagesByChatID", s.Subtest(func(db database.Store, check *expects) {
-		_, c, m := createChat(s.T(), db)
-		check.Args(c.ID).Asserts(c, policy.ActionRead).Returns([]database.ChatMessage{m})
-	}))
-
-	s.Run("GetChatsByOwnerID", s.Subtest(func(db database.Store, check *expects) {
-		u1, u1c1, _ := createChat(s.T(), db)
-		u1c2 := dbgen.Chat(s.T(), db, database.Chat{
-			OwnerID:   u1.ID,
-			CreatedAt: u1c1.CreatedAt.Add(time.Hour),
-		})
-		_, _, _ = createChat(s.T(), db) // other user's chat
-		check.Args(u1.ID).Asserts(u1c2, policy.ActionRead, u1c1, policy.ActionRead).Returns([]database.Chat{u1c2, u1c1})
-	}))
-
-	s.Run("InsertChat", s.Subtest(func(db database.Store, check *expects) {
-		usr := dbgen.User(s.T(), db, database.User{})
-		check.Args(database.InsertChatParams{
-			OwnerID:   usr.ID,
-			Title:     "test chat",
-			CreatedAt: dbtime.Now(),
-			UpdatedAt: dbtime.Now(),
-		}).Asserts(rbac.ResourceChat.WithOwner(usr.ID.String()), policy.ActionCreate)
-	}))
-
-	s.Run("InsertChatMessages", s.Subtest(func(db database.Store, check *expects) {
-		usr := dbgen.User(s.T(), db, database.User{})
-		chat := dbgen.Chat(s.T(), db, database.Chat{
-			OwnerID: usr.ID,
-		})
-		check.Args(database.InsertChatMessagesParams{
-			ChatID:    chat.ID,
-			CreatedAt: dbtime.Now(),
-			Model:     "test-model",
-			Provider:  "test-provider",
-			Content:   []byte(`[]`),
-		}).Asserts(chat, policy.ActionUpdate)
-	}))
-
-	s.Run("UpdateChatByID", s.Subtest(func(db database.Store, check *expects) {
-		_, c, _ := createChat(s.T(), db)
-		check.Args(database.UpdateChatByIDParams{
-			ID:        c.ID,
-			Title:     "new title",
-			UpdatedAt: dbtime.Now(),
-		}).Asserts(c, policy.ActionUpdate)
 	}))
 }
 
