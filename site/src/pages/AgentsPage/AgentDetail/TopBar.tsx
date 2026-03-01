@@ -23,6 +23,7 @@ import { UserDropdown } from "modules/dashboard/Navbar/UserDropdown/UserDropdown
 import { useDashboard } from "modules/dashboard/useDashboard";
 import type { FC } from "react";
 import { useNavigate } from "react-router";
+import { WebPushButton } from "../WebPushButton";
 
 interface DiffStatsBadgeProps {
 	status: ChatDiffStatusResponse;
@@ -200,6 +201,7 @@ export const AgentDetailTopBar: FC<AgentDetailTopBarProps> = ({
 						</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
+				<WebPushButton />
 			</div>
 			<div className="flex items-center [&_span]:!rounded-full [&_span]:!size-8 [&_span]:!text-xs">
 				<UserDropdown
