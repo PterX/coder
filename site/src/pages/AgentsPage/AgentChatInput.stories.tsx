@@ -16,9 +16,9 @@ const meta: Meta<typeof AgentChatInput> = {
 	component: AgentChatInput,
 	args: {
 		onSend: fn(),
-		onChange: fn(),
+		onContentChange: fn(),
 		onModelChange: fn(),
-		value: "",
+		initialValue: "",
 		isDisabled: false,
 		isLoading: false,
 		selectedModel: defaultModelOptions[0].id,
@@ -47,12 +47,24 @@ export const DisablesSendUntilInput: Story = {
 export const SendsAndClearsInput: Story = {
 	args: {
 		onSend: fn(),
-		value: "Run focused tests",
+		initialValue: "Run focused tests",
 	},
 	play: async ({ canvasElement, args }) => {
 		const canvas = within(canvasElement);
 
-		await userEvent.click(canvas.getByRole("button", { name: "Send" }));
+		// Wait for the Lexical editor to initialize and render the
+		// initial value text into the DOM before interacting.
+		const editor = canvas.getByTestId("chat-message-input");
+		await waitFor(() => {
+			expect(editor.textContent).toBe("Run focused tests");
+		});
+
+		const sendButton = canvas.getByRole("button", { name: "Send" });
+		await waitFor(() => {
+			expect(sendButton).toBeEnabled();
+		});
+
+		await userEvent.click(sendButton);
 
 		await waitFor(() => {
 			expect(args.onSend).toHaveBeenCalledWith("Run focused tests");
@@ -63,7 +75,7 @@ export const SendsAndClearsInput: Story = {
 export const DisabledInput: Story = {
 	args: {
 		isDisabled: true,
-		value: "Should not send",
+		initialValue: "Should not send",
 	},
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
@@ -75,7 +87,7 @@ export const NoModelOptions: Story = {
 	args: {
 		isDisabled: false,
 		hasModelOptions: false,
-		value: "Model required",
+		initialValue: "Model required",
 	},
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
@@ -87,7 +99,7 @@ export const LoadingSpinner: Story = {
 	args: {
 		isDisabled: true,
 		isLoading: true,
-		value: "Sending...",
+		initialValue: "Sending...",
 	},
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
@@ -103,7 +115,7 @@ export const LoadingDisablesSend: Story = {
 	args: {
 		isDisabled: false,
 		isLoading: true,
-		value: "Another message",
+		initialValue: "Another message",
 	},
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
