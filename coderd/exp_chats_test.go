@@ -10061,28 +10061,28 @@ func TestChatModelOverrides(t *testing.T) {
 	t.Parallel()
 
 	type overrideResponse struct {
-		context       codersdk.ChatAgentModelOverrideContext
+		context       codersdk.ChatModelOverrideContext
 		modelConfigID string
 		isMalformed   bool
 	}
 
 	type settingTest struct {
 		name     string
-		context  codersdk.ChatAgentModelOverrideContext
+		context  codersdk.ChatModelOverrideContext
 		dbGet    func(context.Context, database.Store) (string, error)
 		dbUpsert func(context.Context, database.Store, string) error
 	}
 
-	settingPath := func(overrideContext codersdk.ChatAgentModelOverrideContext) string {
-		return "/api/experimental/chats/config/agent-model-override/" + string(overrideContext)
+	settingPath := func(overrideContext codersdk.ChatModelOverrideContext) string {
+		return "/api/experimental/chats/config/model-override/" + string(overrideContext)
 	}
 
 	getOverride := func(
 		ctx context.Context,
 		client *codersdk.ExperimentalClient,
-		overrideContext codersdk.ChatAgentModelOverrideContext,
+		overrideContext codersdk.ChatModelOverrideContext,
 	) (overrideResponse, error) {
-		resp, err := client.GetChatAgentModelOverride(ctx, overrideContext)
+		resp, err := client.GetChatModelOverride(ctx, overrideContext)
 		if err != nil {
 			return overrideResponse{}, err
 		}
@@ -10096,20 +10096,20 @@ func TestChatModelOverrides(t *testing.T) {
 	putOverride := func(
 		ctx context.Context,
 		client *codersdk.ExperimentalClient,
-		overrideContext codersdk.ChatAgentModelOverrideContext,
+		overrideContext codersdk.ChatModelOverrideContext,
 		modelConfigID string,
 	) error {
-		return client.UpdateChatAgentModelOverride(
+		return client.UpdateChatModelOverride(
 			ctx,
 			overrideContext,
-			codersdk.UpdateChatAgentModelOverrideRequest{ModelConfigID: modelConfigID},
+			codersdk.UpdateChatModelOverrideRequest{ModelConfigID: modelConfigID},
 		)
 	}
 
 	settings := []settingTest{
 		{
 			name:    "General",
-			context: codersdk.ChatAgentModelOverrideContextGeneral,
+			context: codersdk.ChatModelOverrideContextGeneral,
 			dbGet: func(ctx context.Context, db database.Store) (string, error) {
 				return db.GetChatGeneralModelOverride(dbauthz.AsSystemRestricted(ctx))
 			},
@@ -10119,12 +10119,22 @@ func TestChatModelOverrides(t *testing.T) {
 		},
 		{
 			name:    "Explore",
-			context: codersdk.ChatAgentModelOverrideContextExplore,
+			context: codersdk.ChatModelOverrideContextExplore,
 			dbGet: func(ctx context.Context, db database.Store) (string, error) {
 				return db.GetChatExploreModelOverride(dbauthz.AsSystemRestricted(ctx))
 			},
 			dbUpsert: func(ctx context.Context, db database.Store, value string) error {
 				return db.UpsertChatExploreModelOverride(dbauthz.AsSystemRestricted(ctx), value)
+			},
+		},
+		{
+			name:    "TitleGeneration",
+			context: codersdk.ChatModelOverrideContextTitleGeneration,
+			dbGet: func(ctx context.Context, db database.Store) (string, error) {
+				return db.GetChatTitleGenerationModelOverride(dbauthz.AsSystemRestricted(ctx))
+			},
+			dbUpsert: func(ctx context.Context, db database.Store, value string) error {
+				return db.UpsertChatTitleGenerationModelOverride(dbauthz.AsSystemRestricted(ctx), value)
 			},
 		},
 	}
@@ -10265,23 +10275,23 @@ func TestChatModelOverrides(t *testing.T) {
 
 		adminClient := newChatClient(t)
 		coderdtest.CreateFirstUser(t, adminClient.Client)
-		unknownContext := codersdk.ChatAgentModelOverrideContext("not-a-context")
+		unknownContext := codersdk.ChatModelOverrideContext("not-a-context")
 
 		_, err := getOverride(ctx, adminClient, unknownContext)
 		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
-		require.Equal(t, "Invalid chat agent model override context.", sdkErr.Message)
+		require.Equal(t, "Invalid chat model override context.", sdkErr.Message)
 		require.Equal(
 			t,
-			`Expected one of general, explore. Got "not-a-context".`,
+			`Expected one of general, explore, title_generation. Got "not-a-context".`,
 			sdkErr.Detail,
 		)
 
 		err = putOverride(ctx, adminClient, unknownContext, "")
 		sdkErr = requireSDKError(t, err, http.StatusBadRequest)
-		require.Equal(t, "Invalid chat agent model override context.", sdkErr.Message)
+		require.Equal(t, "Invalid chat model override context.", sdkErr.Message)
 		require.Equal(
 			t,
-			`Expected one of general, explore. Got "not-a-context".`,
+			`Expected one of general, explore, title_generation. Got "not-a-context".`,
 			sdkErr.Detail,
 		)
 	})
@@ -10293,7 +10303,7 @@ func TestChatModelOverrides(t *testing.T) {
 		firstUser := coderdtest.CreateFirstUser(t, adminClient.Client)
 		memberClientRaw, _ := coderdtest.CreateAnotherUser(t, adminClient.Client, firstUser.OrganizationID)
 		memberClient := codersdk.NewExperimentalClient(memberClientRaw)
-		unknownContext := codersdk.ChatAgentModelOverrideContext("not-a-context")
+		unknownContext := codersdk.ChatModelOverrideContext("not-a-context")
 
 		_, err := getOverride(ctx, memberClient, unknownContext)
 		requireSDKError(t, err, http.StatusNotFound)
