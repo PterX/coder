@@ -136,6 +136,9 @@ const StoryAgentChatPageView: FC<StoryProps> = ({ editing, ...overrides }) => {
 		persistedError: undefined as ChatDetailError | undefined,
 		parentChat: undefined as TypesGen.Chat | undefined,
 		isArchived: false,
+		chatOwner: undefined as ComponentProps<
+			typeof AgentChatPageView
+		>["chatOwner"],
 		effectiveSelectedModel: defaultModelConfigID,
 		setSelectedModel: fn(),
 		modelOptions: defaultModelOptions,
@@ -214,11 +217,67 @@ type Story = StoryObj<typeof AgentChatPageView>;
 /** Basic conversation view with a chat title, workspace, and no archive. */
 export const Default: Story = {
 	render: () => <StoryAgentChatPageView />,
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(
+			canvas.queryByText(/^This is not your chat/),
+		).not.toBeInTheDocument();
+	},
 };
 
 /** Archived agent displays the read-only banner below the top bar. */
 export const Archived: Story = {
 	render: () => <StoryAgentChatPageView isArchived isInputDisabled />,
+};
+
+/** Shows an identity warning banner when viewing a chat owned by another user. */
+export const AdminViewingOtherUserChat: Story = {
+	render: () => (
+		<StoryAgentChatPageView
+			chatOwner={{ id: "other-user-id", username: "OtherUser" }}
+		/>
+	),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const banner = canvas.getByText(
+			"This is not your chat. Prompting here will use @OtherUser's identity.",
+		);
+		expect(banner).toBeVisible();
+		expect(banner).toHaveAttribute("role", "status");
+	},
+};
+
+/** Shows the owner ID fallback while the owner profile is unavailable. */
+export const OtherUserChatOwnerFallback: Story = {
+	render: () => <StoryAgentChatPageView chatOwner={{ id: "other-user-id" }} />,
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const banner = canvas.getByText(
+			"This is not your chat. Prompting here will use owner other-user-id's identity.",
+		);
+		expect(banner).toBeVisible();
+		expect(banner).toHaveAttribute("role", "status");
+	},
+};
+
+/** Archived chats stay read-only without the identity warning banner. */
+export const ArchivedOtherUserChat: Story = {
+	render: () => (
+		<StoryAgentChatPageView
+			isArchived
+			isInputDisabled
+			chatOwner={{ id: "other-user-id", username: "OtherUser" }}
+		/>
+	),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(
+			canvas.queryByText(/^This is not your chat/),
+		).not.toBeInTheDocument();
+		expect(
+			canvas.getByText("This agent has been archived and is read-only."),
+		).toBeVisible();
+	},
 };
 
 /** Shows the parent chat link in the top bar when a parent exists. */
