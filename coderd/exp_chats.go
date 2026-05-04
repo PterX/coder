@@ -49,6 +49,7 @@ import (
 	"github.com/coder/coder/v2/coderd/wsbuilder"
 	"github.com/coder/coder/v2/coderd/x/chatd"
 	"github.com/coder/coder/v2/coderd/x/chatd/chatprovider"
+	"github.com/coder/coder/v2/coderd/x/chatd/chattool"
 	"github.com/coder/coder/v2/coderd/x/chatfiles"
 	"github.com/coder/coder/v2/coderd/x/gitsync"
 	"github.com/coder/coder/v2/codersdk"
@@ -4099,6 +4100,58 @@ func (api *API) putChatDesktopEnabled(rw http.ResponseWriter, r *http.Request) {
 	} else if err != nil {
 		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
 			Message: "Internal error updating desktop setting.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	rw.WriteHeader(http.StatusNoContent)
+}
+
+// EXPERIMENTAL: this endpoint is experimental and is subject to change.
+//
+//nolint:revive // get-return: revive assumes get* must be a getter, but this is an HTTP handler.
+func (api *API) getChatComputerUseProvider(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	provider, err := api.Database.GetChatComputerUseProvider(ctx)
+	if err != nil {
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Internal error fetching computer use provider.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	httpapi.Write(ctx, rw, http.StatusOK, codersdk.ChatComputerUseProviderResponse{
+		Provider: chattool.DefaultComputerUseProvider(provider),
+	})
+}
+
+// EXPERIMENTAL: this endpoint is experimental and is subject to change.
+func (api *API) putChatComputerUseProvider(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !api.Authorize(r, policy.ActionUpdate, rbac.ResourceDeploymentConfig) {
+		httpapi.Forbidden(rw)
+		return
+	}
+
+	var req codersdk.UpdateChatComputerUseProviderRequest
+	if !httpapi.Read(ctx, rw, r, &req) {
+		return
+	}
+	if !chattool.IsSupportedComputerUseProvider(req.Provider) {
+		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
+			Message: "Invalid computer use provider.",
+			Detail: fmt.Sprintf(
+				"Expected one of: %s. Got %q.",
+				strings.Join(chattool.SupportedComputerUseProviders(), ", "),
+				req.Provider,
+			),
+		})
+		return
+	}
+
+	if err := api.Database.UpsertChatComputerUseProvider(ctx, req.Provider); err != nil {
+		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+			Message: "Internal error updating computer use provider.",
 			Detail:  err.Error(),
 		})
 		return
