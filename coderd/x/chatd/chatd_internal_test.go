@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"charm.land/fantasy"
-	fantasyopenai "charm.land/fantasy/providers/openai"
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/stretchr/testify/require"
@@ -24,7 +23,6 @@ import (
 	coderdpubsub "github.com/coder/coder/v2/coderd/pubsub"
 	"github.com/coder/coder/v2/coderd/x/chatd/chaterror"
 	"github.com/coder/coder/v2/coderd/x/chatd/chatloop"
-	"github.com/coder/coder/v2/coderd/x/chatd/chatprompt"
 	"github.com/coder/coder/v2/coderd/x/chatd/chatprovider"
 	"github.com/coder/coder/v2/coderd/x/chatd/chattest"
 	"github.com/coder/coder/v2/coderd/x/chatd/chattool"
@@ -2603,7 +2601,7 @@ func TestSkillsFromParts(t *testing.T) {
 	t.Run("NoSkillParts", func(t *testing.T) {
 		t.Parallel()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{Type: codersdk.ChatMessagePartTypeText, Text: "hello"},
 			}),
 		}
@@ -2614,7 +2612,7 @@ func TestSkillsFromParts(t *testing.T) {
 	t.Run("SingleSkill", func(t *testing.T) {
 		t.Parallel()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{
 					Type:             codersdk.ChatMessagePartTypeSkill,
 					SkillName:        "deep-review",
@@ -2633,14 +2631,14 @@ func TestSkillsFromParts(t *testing.T) {
 	t.Run("MultipleSkillsAcrossMessages", func(t *testing.T) {
 		t.Parallel()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{
 					Type:      codersdk.ChatMessagePartTypeSkill,
 					SkillName: "pull-requests",
 					SkillDir:  "/home/coder/.agents/skills/pull-requests",
 				},
 			}),
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{
 					Type:      codersdk.ChatMessagePartTypeSkill,
 					SkillName: "deep-review",
@@ -2657,7 +2655,7 @@ func TestSkillsFromParts(t *testing.T) {
 	t.Run("MixedPartTypes", func(t *testing.T) {
 		t.Parallel()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{
 					Type:            codersdk.ChatMessagePartTypeContextFile,
 					ContextFilePath: "/home/coder/.coder/AGENTS.md",
@@ -2669,7 +2667,7 @@ func TestSkillsFromParts(t *testing.T) {
 				},
 			}),
 			// A text-only message should be skipped entirely.
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{Type: codersdk.ChatMessagePartTypeText, Text: "user turn"},
 			}),
 		}
@@ -2682,7 +2680,7 @@ func TestSkillsFromParts(t *testing.T) {
 	t.Run("OptionalDescriptionOmitted", func(t *testing.T) {
 		t.Parallel()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{
 					Type:      codersdk.ChatMessagePartTypeSkill,
 					SkillName: "refine-plan",
@@ -2730,7 +2728,7 @@ func TestSkillsFromParts(t *testing.T) {
 				ContextFileAgentID: uuid.NullUUID{UUID: agentID, Valid: true},
 			})
 		}
-		msgs := []database.ChatMessage{chatMessageWithParts(parts)}
+		msgs := []database.ChatMessage{chattest.ChatMessageWithParts(parts)}
 		got := skillsFromParts(msgs)
 		require.Len(t, got, len(want))
 		for i, w := range want {
@@ -2754,7 +2752,7 @@ func TestContextFileAgentID(t *testing.T) {
 	t.Run("NoContextFileParts", func(t *testing.T) {
 		t.Parallel()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{Type: codersdk.ChatMessagePartTypeText, Text: "hello"},
 			}),
 		}
@@ -2767,7 +2765,7 @@ func TestContextFileAgentID(t *testing.T) {
 		t.Parallel()
 		agentID := uuid.New()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{
 					Type:               codersdk.ChatMessagePartTypeContextFile,
 					ContextFilePath:    "/some/path",
@@ -2785,14 +2783,14 @@ func TestContextFileAgentID(t *testing.T) {
 		agentID1 := uuid.New()
 		agentID2 := uuid.New()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{
 					Type:               codersdk.ChatMessagePartTypeContextFile,
 					ContextFilePath:    "/first/path",
 					ContextFileAgentID: uuid.NullUUID{UUID: agentID1, Valid: true},
 				},
 			}),
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{
 					Type:               codersdk.ChatMessagePartTypeContextFile,
 					ContextFilePath:    "/second/path",
@@ -2810,12 +2808,12 @@ func TestContextFileAgentID(t *testing.T) {
 		instructionAgentID := uuid.New()
 		sentinelAgentID := uuid.New()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{{
 				Type:               codersdk.ChatMessagePartTypeContextFile,
 				ContextFilePath:    "/workspace/AGENTS.md",
 				ContextFileAgentID: uuid.NullUUID{UUID: instructionAgentID, Valid: true},
 			}}),
-			chatMessageWithParts([]codersdk.ChatMessagePart{{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{{
 				Type:            codersdk.ChatMessagePartTypeContextFile,
 				ContextFilePath: AgentChatContextSentinelPath,
 				ContextFileAgentID: uuid.NullUUID{
@@ -2832,7 +2830,7 @@ func TestContextFileAgentID(t *testing.T) {
 	t.Run("SentinelWithoutAgentID", func(t *testing.T) {
 		t.Parallel()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 				{
 					Type:               codersdk.ChatMessagePartTypeContextFile,
 					ContextFileAgentID: uuid.NullUUID{Valid: false},
@@ -2852,7 +2850,7 @@ func TestHasPersistedInstructionFiles(t *testing.T) {
 		t.Parallel()
 		agentID := uuid.New()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{{
 				Type:            codersdk.ChatMessagePartTypeContextFile,
 				ContextFilePath: AgentChatContextSentinelPath,
 				ContextFileAgentID: uuid.NullUUID{
@@ -2868,7 +2866,7 @@ func TestHasPersistedInstructionFiles(t *testing.T) {
 		t.Parallel()
 		agentID := uuid.New()
 		msgs := []database.ChatMessage{
-			chatMessageWithParts([]codersdk.ChatMessagePart{{
+			chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{{
 				Type:               codersdk.ChatMessagePartTypeContextFile,
 				ContextFilePath:    "/workspace/AGENTS.md",
 				ContextFileContent: "repo instructions",
@@ -2885,7 +2883,7 @@ func TestInstructionFromContextFilesUsesLatestContextAgent(t *testing.T) {
 	oldAgentID := uuid.New()
 	newAgentID := uuid.New()
 	msgs := []database.ChatMessage{
-		chatMessageWithParts([]codersdk.ChatMessagePart{{
+		chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{{
 			Type:                 codersdk.ChatMessagePartTypeContextFile,
 			ContextFilePath:      "/old/AGENTS.md",
 			ContextFileContent:   "old instructions",
@@ -2893,7 +2891,7 @@ func TestInstructionFromContextFilesUsesLatestContextAgent(t *testing.T) {
 			ContextFileDirectory: "/old",
 			ContextFileAgentID:   uuid.NullUUID{UUID: oldAgentID, Valid: true},
 		}}),
-		chatMessageWithParts([]codersdk.ChatMessagePart{{
+		chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{{
 			Type:                 codersdk.ChatMessagePartTypeContextFile,
 			ContextFilePath:      "/new/AGENTS.md",
 			ContextFileContent:   "new instructions",
@@ -2917,12 +2915,12 @@ func TestInstructionFromContextFilesKeepsLegacyUnstampedParts(t *testing.T) {
 	oldAgentID := uuid.New()
 	newAgentID := uuid.New()
 	msgs := []database.ChatMessage{
-		chatMessageWithParts([]codersdk.ChatMessagePart{{
+		chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{{
 			Type:               codersdk.ChatMessagePartTypeContextFile,
 			ContextFilePath:    "/legacy/AGENTS.md",
 			ContextFileContent: "legacy instructions",
 		}}),
-		chatMessageWithParts([]codersdk.ChatMessagePart{{
+		chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{{
 			Type:                 codersdk.ChatMessagePartTypeContextFile,
 			ContextFilePath:      "/old/AGENTS.md",
 			ContextFileContent:   "old instructions",
@@ -2930,7 +2928,7 @@ func TestInstructionFromContextFilesKeepsLegacyUnstampedParts(t *testing.T) {
 			ContextFileDirectory: "/old",
 			ContextFileAgentID:   uuid.NullUUID{UUID: oldAgentID, Valid: true},
 		}}),
-		chatMessageWithParts([]codersdk.ChatMessagePart{{
+		chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{{
 			Type:                 codersdk.ChatMessagePartTypeContextFile,
 			ContextFilePath:      "/new/AGENTS.md",
 			ContextFileContent:   "new instructions",
@@ -2955,12 +2953,12 @@ func TestSkillsFromPartsKeepsLegacyUnstampedParts(t *testing.T) {
 	oldAgentID := uuid.New()
 	newAgentID := uuid.New()
 	msgs := []database.ChatMessage{
-		chatMessageWithParts([]codersdk.ChatMessagePart{{
+		chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{{
 			Type:      codersdk.ChatMessagePartTypeSkill,
 			SkillName: "repo-helper-legacy",
 			SkillDir:  "/skills/repo-helper-legacy",
 		}}),
-		chatMessageWithParts([]codersdk.ChatMessagePart{
+		chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 			{
 				Type:               codersdk.ChatMessagePartTypeContextFile,
 				ContextFilePath:    "/old/AGENTS.md",
@@ -2973,7 +2971,7 @@ func TestSkillsFromPartsKeepsLegacyUnstampedParts(t *testing.T) {
 				ContextFileAgentID: uuid.NullUUID{UUID: oldAgentID, Valid: true},
 			},
 		}),
-		chatMessageWithParts([]codersdk.ChatMessagePart{
+		chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 			{
 				Type:            codersdk.ChatMessagePartTypeContextFile,
 				ContextFilePath: AgentChatContextSentinelPath,
@@ -3004,7 +3002,7 @@ func TestSkillsFromPartsUsesLatestContextAgent(t *testing.T) {
 	oldAgentID := uuid.New()
 	newAgentID := uuid.New()
 	msgs := []database.ChatMessage{
-		chatMessageWithParts([]codersdk.ChatMessagePart{
+		chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 			{
 				Type:               codersdk.ChatMessagePartTypeContextFile,
 				ContextFilePath:    "/old/AGENTS.md",
@@ -3017,7 +3015,7 @@ func TestSkillsFromPartsUsesLatestContextAgent(t *testing.T) {
 				ContextFileAgentID: uuid.NullUUID{UUID: oldAgentID, Valid: true},
 			},
 		}),
-		chatMessageWithParts([]codersdk.ChatMessagePart{
+		chattest.ChatMessageWithParts([]codersdk.ChatMessagePart{
 			{
 				Type:            codersdk.ChatMessagePartTypeContextFile,
 				ContextFilePath: AgentChatContextSentinelPath,
@@ -3111,625 +3109,6 @@ func TestSelectSkillMetasForInstructionRefresh(t *testing.T) {
 		)
 		require.Equal(t, persisted, got)
 	})
-}
-
-func TestResolveChainModeIgnoresSkillOnlySentinelMessages(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	assistant := database.ChatMessage{
-		Role:               database.ChatMessageRoleAssistant,
-		ProviderResponseID: sql.NullString{String: "resp-123", Valid: true},
-		ModelConfigID:      uuid.NullUUID{UUID: modelConfigID, Valid: true},
-	}
-	skillOnly := chatMessageWithParts([]codersdk.ChatMessagePart{
-		{
-			Type:            codersdk.ChatMessagePartTypeContextFile,
-			ContextFilePath: AgentChatContextSentinelPath,
-			ContextFileAgentID: uuid.NullUUID{
-				UUID:  uuid.New(),
-				Valid: true,
-			},
-		},
-		{
-			Type:      codersdk.ChatMessagePartTypeSkill,
-			SkillName: "repo-helper",
-			SkillDir:  "/skills/repo-helper",
-		},
-	})
-	skillOnly.Role = database.ChatMessageRoleUser
-	user := chatMessageWithParts([]codersdk.ChatMessagePart{{
-		Type: codersdk.ChatMessagePartTypeText,
-		Text: "latest user message",
-	}})
-	user.Role = database.ChatMessageRoleUser
-
-	got := resolveChainMode([]database.ChatMessage{assistant, skillOnly, user})
-	require.Equal(t, "resp-123", got.previousResponseID)
-	require.Equal(t, modelConfigID, got.modelConfigID)
-	require.Equal(t, 2, got.trailingUserCount)
-	require.Equal(t, 1, got.contributingTrailingUserCount)
-}
-
-func TestResolveChainMode_BlocksOnUnresolvedLocalToolCall(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	toolCall := codersdk.ChatMessageToolCall(
-		"call-local",
-		"read_file",
-		json.RawMessage(`{"path":"main.go"}`),
-	)
-
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		chainModeSystemMessage(),
-		chainModeUserMessage("prior user message"),
-		chainModeAssistantMessage(modelConfigID, []codersdk.ChatMessagePart{toolCall}),
-		chainModeUserMessage("latest user message"),
-	})
-
-	require.Equal(t, "resp-123", chainInfo.previousResponseID)
-	require.True(t, chainInfo.hasUnresolvedLocalToolCalls)
-	require.False(t, shouldActivateChainMode(
-		chainModeProviderOptions(),
-		chainInfo,
-		modelConfigID,
-		false,
-	))
-}
-
-func TestResolveChainMode_BlocksWhenAssistantContentCannotParse(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		chainModeSystemMessage(),
-		chainModeUserMessage("prior user message"),
-		chainModeCorruptAssistantMessage(modelConfigID),
-		chainModeUserMessage("latest user message"),
-	})
-
-	require.Equal(t, "resp-123", chainInfo.previousResponseID)
-	require.True(t, chainInfo.hasUnresolvedLocalToolCalls)
-	require.False(t, shouldActivateChainMode(
-		chainModeProviderOptions(),
-		chainInfo,
-		modelConfigID,
-		false,
-	))
-}
-
-func TestResolveChainMode_BlocksWhenToolContentCannotParse(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	toolCall := codersdk.ChatMessageToolCall(
-		"call-local",
-		"read_file",
-		json.RawMessage(`{"path":"main.go"}`),
-	)
-
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		chainModeSystemMessage(),
-		chainModeUserMessage("prior user message"),
-		chainModeAssistantMessage(modelConfigID, []codersdk.ChatMessagePart{toolCall}),
-		chainModeCorruptToolMessage(),
-		chainModeUserMessage("latest user message"),
-	})
-
-	require.Equal(t, "resp-123", chainInfo.previousResponseID)
-	require.True(t, chainInfo.hasUnresolvedLocalToolCalls)
-	require.False(t, shouldActivateChainMode(
-		chainModeProviderOptions(),
-		chainInfo,
-		modelConfigID,
-		false,
-	))
-}
-
-func TestResolveChainMode_AllowsProviderExecutedOnly(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	toolCall := codersdk.ChatMessageToolCall(
-		"call-web-search",
-		"web_search",
-		json.RawMessage(`{"query":"coder docs"}`),
-	)
-	toolCall.ProviderExecuted = true
-
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		chainModeSystemMessage(),
-		chainModeUserMessage("prior user message"),
-		chainModeAssistantMessage(modelConfigID, []codersdk.ChatMessagePart{toolCall}),
-		chainModeUserMessage("latest user message"),
-	})
-
-	require.Equal(t, "resp-123", chainInfo.previousResponseID)
-	require.False(t, chainInfo.hasUnresolvedLocalToolCalls)
-	require.False(t, chainInfo.providerMissingToolResults)
-	require.True(t, shouldActivateChainMode(
-		chainModeProviderOptions(),
-		chainInfo,
-		modelConfigID,
-		false,
-	))
-}
-
-func TestResolveChainMode_BlocksOnMixedProviderExecutedAndUnresolvedLocalCall(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	providerCall := codersdk.ChatMessageToolCall(
-		"call-web-search",
-		"web_search",
-		json.RawMessage(`{"query":"coder docs"}`),
-	)
-	providerCall.ProviderExecuted = true
-	localCall := codersdk.ChatMessageToolCall(
-		"call-local",
-		"read_file",
-		json.RawMessage(`{"path":"main.go"}`),
-	)
-
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		chainModeSystemMessage(),
-		chainModeUserMessage("prior user message"),
-		chainModeAssistantMessage(
-			modelConfigID,
-			[]codersdk.ChatMessagePart{providerCall, localCall},
-		),
-		chainModeUserMessage("latest user message"),
-	})
-
-	require.Equal(t, "resp-123", chainInfo.previousResponseID)
-	require.True(t, chainInfo.hasUnresolvedLocalToolCalls)
-	require.False(t, shouldActivateChainMode(
-		chainModeProviderOptions(),
-		chainInfo,
-		modelConfigID,
-		false,
-	))
-}
-
-func TestResolveChainMode_AllowsResolvedLocalCall(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	toolCall := codersdk.ChatMessageToolCall(
-		"call-local",
-		"read_file",
-		json.RawMessage(`{"path":"main.go"}`),
-	)
-	toolResult := codersdk.ChatMessageToolResult(
-		"call-local",
-		"read_file",
-		json.RawMessage(`{"ok":true}`),
-		false,
-		false,
-	)
-
-	// A follow-up assistant after the tool result confirms the
-	// result was sent back to the provider. Chain mode should
-	// activate from the follow-up assistant's response ID.
-	// Use a distinct response ID on the follow-up assistant
-	// so the assertion verifies resolveChainMode selects the
-	// follow-up (last assistant), not the original tool-caller.
-	followUp := chainModeAssistantMessage(modelConfigID, nil)
-	followUp.ProviderResponseID = sql.NullString{String: "resp-follow-up", Valid: true}
-
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		chainModeSystemMessage(),
-		chainModeUserMessage("prior user message"),
-		chainModeAssistantMessage(modelConfigID, []codersdk.ChatMessagePart{toolCall}),
-		chainModeToolMessage([]codersdk.ChatMessagePart{toolResult}),
-		followUp,
-		chainModeUserMessage("latest user message"),
-	})
-
-	require.Equal(t, "resp-follow-up", chainInfo.previousResponseID)
-	require.False(t, chainInfo.hasUnresolvedLocalToolCalls)
-	require.False(t, chainInfo.providerMissingToolResults)
-	require.True(t, shouldActivateChainMode(
-		chainModeProviderOptions(),
-		chainInfo,
-		modelConfigID,
-		false,
-	))
-}
-
-func TestResolveChainMode_BlocksOnMixedResolvedAndUnresolved(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	firstCall := codersdk.ChatMessageToolCall(
-		"call-first",
-		"read_file",
-		json.RawMessage(`{"path":"main.go"}`),
-	)
-	secondCall := codersdk.ChatMessageToolCall(
-		"call-second",
-		"read_file",
-		json.RawMessage(`{"path":"README.md"}`),
-	)
-	toolResult := codersdk.ChatMessageToolResult(
-		"call-first",
-		"read_file",
-		json.RawMessage(`{"ok":true}`),
-		false,
-		false,
-	)
-
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		chainModeSystemMessage(),
-		chainModeUserMessage("prior user message"),
-		chainModeAssistantMessage(
-			modelConfigID,
-			[]codersdk.ChatMessagePart{firstCall, secondCall},
-		),
-		chainModeToolMessage([]codersdk.ChatMessagePart{toolResult}),
-		chainModeUserMessage("latest user message"),
-	})
-
-	require.Equal(t, "resp-123", chainInfo.previousResponseID)
-	require.True(t, chainInfo.hasUnresolvedLocalToolCalls)
-	require.False(t, shouldActivateChainMode(
-		chainModeProviderOptions(),
-		chainInfo,
-		modelConfigID,
-		false,
-	))
-}
-
-// Tests for providerMissingToolResults detection.
-// These cover the StopAfterTool + chain mode desync bug where local
-// tool results exist in the DB but were never sent back to the
-// provider, leaving an unresolved function_call in the stored chain.
-
-func TestResolveChainMode_BlocksWhenToolResultNeverSentToProvider(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	toolCall := codersdk.ChatMessageToolCall(
-		"call-local",
-		"propose_plan",
-		json.RawMessage(`{"path":"plan.md"}`),
-	)
-	toolResult := codersdk.ChatMessageToolResult(
-		"call-local",
-		"propose_plan",
-		json.RawMessage(`{"ok":true}`),
-		false,
-		false,
-	)
-
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		chainModeSystemMessage(),
-		chainModeUserMessage("make a plan"),
-		chainModeAssistantMessage(modelConfigID, []codersdk.ChatMessagePart{toolCall}),
-		chainModeToolMessage([]codersdk.ChatMessagePart{toolResult}),
-		// No follow-up assistant: StopAfterTool fired, tool result
-		// was persisted locally but never sent back to the provider.
-		chainModeUserMessage("implement the plan"),
-	})
-
-	require.Equal(t, "resp-123", chainInfo.previousResponseID)
-	// Local tool calls are resolved (result exists in DB).
-	require.False(t, chainInfo.hasUnresolvedLocalToolCalls)
-	// But the provider never received the result.
-	require.True(t, chainInfo.providerMissingToolResults)
-	// Chain mode must NOT activate.
-	require.False(t, shouldActivateChainMode(
-		chainModeProviderOptions(),
-		chainInfo,
-		modelConfigID,
-		false,
-	))
-}
-
-func TestResolveChainMode_BlocksProviderMissingWithMultipleToolCalls(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	call1 := codersdk.ChatMessageToolCall(
-		"call-1", "propose_plan",
-		json.RawMessage(`{"path":"plan.md"}`),
-	)
-	call2 := codersdk.ChatMessageToolCall(
-		"call-2", "write_file",
-		json.RawMessage(`{"path":"foo.go"}`),
-	)
-	result1 := codersdk.ChatMessageToolResult(
-		"call-1", "propose_plan",
-		json.RawMessage(`{"ok":true}`), false, false,
-	)
-	result2 := codersdk.ChatMessageToolResult(
-		"call-2", "write_file",
-		json.RawMessage(`{"ok":true}`), false, false,
-	)
-
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		chainModeSystemMessage(),
-		chainModeUserMessage("do it"),
-		chainModeAssistantMessage(modelConfigID, []codersdk.ChatMessagePart{call1, call2}),
-		chainModeToolMessage([]codersdk.ChatMessagePart{result1, result2}),
-		chainModeUserMessage("next"),
-	})
-
-	require.False(t, chainInfo.hasUnresolvedLocalToolCalls)
-	require.True(t, chainInfo.providerMissingToolResults)
-	require.False(t, shouldActivateChainMode(
-		chainModeProviderOptions(), chainInfo, modelConfigID, false,
-	))
-}
-
-func TestResolveChainMode_AllowsWhenNoToolCalls(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		chainModeSystemMessage(),
-		chainModeUserMessage("hello"),
-		chainModeAssistantMessage(modelConfigID, nil),
-		chainModeUserMessage("thanks"),
-	})
-
-	require.Equal(t, "resp-123", chainInfo.previousResponseID)
-	require.False(t, chainInfo.hasUnresolvedLocalToolCalls)
-	require.False(t, chainInfo.providerMissingToolResults)
-	require.True(t, shouldActivateChainMode(
-		chainModeProviderOptions(), chainInfo, modelConfigID, false,
-	))
-}
-
-func chainModeProviderOptions() fantasy.ProviderOptions {
-	store := true
-	return fantasy.ProviderOptions{
-		fantasyopenai.Name: &fantasyopenai.ResponsesProviderOptions{
-			Store: &store,
-		},
-	}
-}
-
-func chainModeSystemMessage() database.ChatMessage {
-	return database.ChatMessage{Role: database.ChatMessageRoleSystem}
-}
-
-func chainModeUserMessage(text string) database.ChatMessage {
-	msg := chatMessageWithParts([]codersdk.ChatMessagePart{
-		codersdk.ChatMessageText(text),
-	})
-	msg.Role = database.ChatMessageRoleUser
-	return msg
-}
-
-func chainModeAssistantMessage(
-	modelConfigID uuid.UUID,
-	parts []codersdk.ChatMessagePart,
-) database.ChatMessage {
-	msg := chatMessageWithParts(parts)
-	msg.Role = database.ChatMessageRoleAssistant
-	msg.ProviderResponseID = sql.NullString{String: "resp-123", Valid: true}
-	msg.ModelConfigID = uuid.NullUUID{UUID: modelConfigID, Valid: true}
-	return msg
-}
-
-func chainModeCorruptAssistantMessage(modelConfigID uuid.UUID) database.ChatMessage {
-	return database.ChatMessage{
-		Role:               database.ChatMessageRoleAssistant,
-		ProviderResponseID: sql.NullString{String: "resp-123", Valid: true},
-		ModelConfigID:      uuid.NullUUID{UUID: modelConfigID, Valid: true},
-		Content: pqtype.NullRawMessage{
-			RawMessage: []byte("not json"),
-			Valid:      true,
-		},
-		ContentVersion: chatprompt.CurrentContentVersion,
-	}
-}
-
-func chainModeCorruptToolMessage() database.ChatMessage {
-	return database.ChatMessage{
-		Role: database.ChatMessageRoleTool,
-		Content: pqtype.NullRawMessage{
-			RawMessage: []byte("not json"),
-			Valid:      true,
-		},
-		ContentVersion: chatprompt.CurrentContentVersion,
-	}
-}
-
-func chainModeToolMessage(parts []codersdk.ChatMessagePart) database.ChatMessage {
-	msg := chatMessageWithParts(parts)
-	msg.Role = database.ChatMessageRoleTool
-	return msg
-}
-
-func TestFilterPromptForChainModeKeepsContributingUsersAcrossSkippedSentinelTurns(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	priorUser := chatMessageWithParts([]codersdk.ChatMessagePart{{
-		Type: codersdk.ChatMessagePartTypeText,
-		Text: "prior user message",
-	}})
-	priorUser.Role = database.ChatMessageRoleUser
-	assistant := database.ChatMessage{
-		Role:               database.ChatMessageRoleAssistant,
-		ProviderResponseID: sql.NullString{String: "resp-123", Valid: true},
-		ModelConfigID:      uuid.NullUUID{UUID: modelConfigID, Valid: true},
-	}
-	firstTrailingUser := chatMessageWithParts([]codersdk.ChatMessagePart{{
-		Type: codersdk.ChatMessagePartTypeText,
-		Text: "first trailing user",
-	}})
-	firstTrailingUser.Role = database.ChatMessageRoleUser
-	skillOnly := chatMessageWithParts([]codersdk.ChatMessagePart{
-		{
-			Type:            codersdk.ChatMessagePartTypeContextFile,
-			ContextFilePath: AgentChatContextSentinelPath,
-			ContextFileAgentID: uuid.NullUUID{
-				UUID:  uuid.New(),
-				Valid: true,
-			},
-		},
-		{
-			Type:      codersdk.ChatMessagePartTypeSkill,
-			SkillName: "repo-helper",
-			SkillDir:  "/skills/repo-helper",
-		},
-	})
-	skillOnly.Role = database.ChatMessageRoleUser
-	lastTrailingUser := chatMessageWithParts([]codersdk.ChatMessagePart{{
-		Type: codersdk.ChatMessagePartTypeText,
-		Text: "last trailing user",
-	}})
-	lastTrailingUser.Role = database.ChatMessageRoleUser
-
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		priorUser,
-		assistant,
-		firstTrailingUser,
-		skillOnly,
-		lastTrailingUser,
-	})
-	require.Equal(t, 3, chainInfo.trailingUserCount)
-	require.Equal(t, 2, chainInfo.contributingTrailingUserCount)
-
-	prompt := []fantasy.Message{
-		{
-			Role: fantasy.MessageRoleSystem,
-			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: "system instruction"},
-			},
-		},
-		{
-			Role: fantasy.MessageRoleUser,
-			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: "prior user message"},
-			},
-		},
-		{
-			Role: fantasy.MessageRoleAssistant,
-			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: "assistant reply"},
-			},
-		},
-		{
-			Role: fantasy.MessageRoleUser,
-			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: "first trailing user"},
-			},
-		},
-		{
-			Role: fantasy.MessageRoleUser,
-			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: "last trailing user"},
-			},
-		},
-	}
-
-	got := filterPromptForChainMode(prompt, chainInfo)
-	require.Len(t, got, 3)
-	require.Equal(t, fantasy.MessageRoleSystem, got[0].Role)
-	require.Equal(t, fantasy.MessageRoleUser, got[1].Role)
-	require.Equal(t, fantasy.MessageRoleUser, got[2].Role)
-
-	firstPart, ok := fantasy.AsMessagePart[fantasy.TextPart](got[1].Content[0])
-	require.True(t, ok)
-	require.Equal(t, "first trailing user", firstPart.Text)
-	lastPart, ok := fantasy.AsMessagePart[fantasy.TextPart](got[2].Content[0])
-	require.True(t, ok)
-	require.Equal(t, "last trailing user", lastPart.Text)
-}
-
-func TestFilterPromptForChainModeUsesContributingTrailingUsers(t *testing.T) {
-	t.Parallel()
-
-	modelConfigID := uuid.New()
-	priorUser := chatMessageWithParts([]codersdk.ChatMessagePart{{
-		Type: codersdk.ChatMessagePartTypeText,
-		Text: "prior user message",
-	}})
-	priorUser.Role = database.ChatMessageRoleUser
-	assistant := database.ChatMessage{
-		Role:               database.ChatMessageRoleAssistant,
-		ProviderResponseID: sql.NullString{String: "resp-123", Valid: true},
-		ModelConfigID:      uuid.NullUUID{UUID: modelConfigID, Valid: true},
-	}
-	skillOnly := chatMessageWithParts([]codersdk.ChatMessagePart{
-		{
-			Type:            codersdk.ChatMessagePartTypeContextFile,
-			ContextFilePath: AgentChatContextSentinelPath,
-			ContextFileAgentID: uuid.NullUUID{
-				UUID:  uuid.New(),
-				Valid: true,
-			},
-		},
-		{
-			Type:      codersdk.ChatMessagePartTypeSkill,
-			SkillName: "repo-helper",
-			SkillDir:  "/skills/repo-helper",
-		},
-	})
-	skillOnly.Role = database.ChatMessageRoleUser
-	latestUser := chatMessageWithParts([]codersdk.ChatMessagePart{{
-		Type: codersdk.ChatMessagePartTypeText,
-		Text: "latest user message",
-	}})
-	latestUser.Role = database.ChatMessageRoleUser
-
-	chainInfo := resolveChainMode([]database.ChatMessage{
-		priorUser,
-		assistant,
-		skillOnly,
-		latestUser,
-	})
-	require.Equal(t, 2, chainInfo.trailingUserCount)
-	require.Equal(t, 1, chainInfo.contributingTrailingUserCount)
-
-	prompt := []fantasy.Message{
-		{
-			Role: fantasy.MessageRoleSystem,
-			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: "system instruction"},
-			},
-		},
-		{
-			Role: fantasy.MessageRoleUser,
-			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: "prior user message"},
-			},
-		},
-		{
-			Role: fantasy.MessageRoleAssistant,
-			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: "assistant reply"},
-			},
-		},
-		{
-			Role: fantasy.MessageRoleUser,
-			Content: []fantasy.MessagePart{
-				fantasy.TextPart{Text: "latest user message"},
-			},
-		},
-	}
-
-	got := filterPromptForChainMode(prompt, chainInfo)
-	require.Len(t, got, 2)
-	require.Equal(t, fantasy.MessageRoleSystem, got[0].Role)
-	require.Equal(t, fantasy.MessageRoleUser, got[1].Role)
-
-	part, ok := fantasy.AsMessagePart[fantasy.TextPart](got[1].Content[0])
-	require.True(t, ok)
-	require.Equal(t, "latest user message", part.Text)
-}
-
-func chatMessageWithParts(parts []codersdk.ChatMessagePart) database.ChatMessage {
-	raw, _ := json.Marshal(parts)
-	return database.ChatMessage{
-		Content: pqtype.NullRawMessage{RawMessage: raw, Valid: true},
-	}
 }
 
 // TestProcessChat_IgnoresStaleControlNotification verifies that
