@@ -57,6 +57,7 @@ import {
 } from "./AgentChatPageView";
 import type { AgentsOutletContext } from "./AgentsPage";
 import type { ChatMessageInputRef } from "./components/AgentChatInput";
+import { normalizeChatErrorPayload } from "./components/ChatConversation/chatError";
 import {
 	getParentChatID,
 	getWorkspaceAgent,
@@ -547,16 +548,13 @@ const getPersistedDetailError = ({
 	if (cachedError?.kind === "usage_limit") {
 		return cachedError;
 	}
-	if (chatStatus === "error") {
-		if (cachedError) {
-			return cachedError;
-		}
-		const lastError = chatRecord?.last_error?.trim();
-		if (lastError) {
-			return { kind: "generic", message: lastError };
-		}
+	if (chatStatus !== "error") {
+		return undefined;
 	}
-	return undefined;
+	if (cachedError) {
+		return cachedError;
+	}
+	return normalizeChatErrorPayload(chatRecord?.last_error);
 };
 
 /**
