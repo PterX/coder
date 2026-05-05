@@ -595,6 +595,30 @@ export const WithOrganizationPicker: Story = {
 	},
 };
 
+export const OrgPickerTightSpacing: Story = {
+	parameters: {
+		showOrganizations: true,
+		organizations: [MockDefaultOrganization, MockOrganization2],
+		queries: [
+			{
+				key: permittedOrgsKey,
+				data: [MockDefaultOrganization, MockOrganization2],
+			},
+		],
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const orgTrigger = await canvas.findByTestId("compact-org-selector");
+		const composer = await canvas.findByTestId("chat-composer");
+
+		const orgRect = orgTrigger.getBoundingClientRect();
+		const composerRect = composer.getBoundingClientRect();
+		const gap = composerRect.top - orgRect.bottom;
+		expect(gap).toBeGreaterThanOrEqual(0);
+		expect(gap).toBeLessThan(16);
+	},
+};
+
 /**
  * Standalone story for the org-change confirmation dialog. Renders
  * the ConfirmDialog directly in its open state, following the same
