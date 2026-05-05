@@ -18,6 +18,7 @@ import {
 } from "#/testHelpers/entities";
 import { withDashboardProvider } from "#/testHelpers/storybook";
 import { AgentCreateForm } from "./AgentCreateForm";
+import { AgentSetupNotice } from "./AgentSetupNotice";
 
 // Query key used by permittedOrganizations() in the form.
 const permittedOrgsKey = [
@@ -463,6 +464,37 @@ export const NoModelsConfigured: Story = {
 		modelOptions: [],
 		isModelCatalogLoading: false,
 		isModelConfigsLoading: false,
+	},
+};
+
+export const MissingProviderAndModelSetup: Story = {
+	args: {
+		...defaultArgs,
+		agentSetupNotice: <AgentSetupNotice providerCount={0} modelCount={0} />,
+		modelCatalog: { providers: [] },
+		modelOptions: [],
+		isModelCatalogLoading: false,
+		isModelConfigsLoading: false,
+	},
+	play: async ({ canvasElement }) => {
+		const body = within(canvasElement.ownerDocument.body);
+		const dialog = within(
+			body.getByRole("dialog", { name: "Welcome to Coder Agents" }),
+		);
+
+		await waitFor(() => {
+			expect(dialog.getByText("Welcome to Coder Agents")).toBeVisible();
+		});
+		expect(dialog.getByText("Connect a chat provider")).toBeVisible();
+		expect(dialog.getByText("Add a chat model")).toBeVisible();
+		expect(dialog.queryByLabelText("Complete")).not.toBeInTheDocument();
+		expect(
+			dialog.getByRole("link", { name: "Go to Providers" }),
+		).toHaveAttribute("href", "/agents/settings/providers");
+		expect(dialog.getByRole("link", { name: "Go to Models" })).toHaveAttribute(
+			"href",
+			"/agents/settings/models",
+		);
 	},
 };
 
